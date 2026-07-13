@@ -1,0 +1,19 @@
+{
+  "name": "love-records-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate": "wrangler d1 migrations apply love-records-db"
+  },
+  "dependencies": {
+    "@hono/hono": "^4.6.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240701.0",
+    "wrangler": "^3.60.0",
+    "typescript": "^5.5.0"
+  }
+}
