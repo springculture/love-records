@@ -210,7 +210,7 @@ records.put('/:id', authenticate, requirePermission('records', 'can_update'), as
   try {
     const id = parseInt(c.req.param('id'));
     const user = c.get('user');
-    const { type, date, title, location, description, visibility } = await c.req.json();
+    const { type, date, title, location, description, visibility, photoKeys } = await c.req.json();
 
     if (isNaN(id)) {
       return c.json({ error: '无效的记录ID' }, 400);
@@ -247,6 +247,16 @@ records.put('/:id', authenticate, requirePermission('records', 'can_update'), as
       vis,
       id
     ).run();
+
+    // 处理新增的照片
+    if (photoKeys && Array.isArray(photoKeys) && photoKeys.length > 0) {
+      const insertPhoto = c.env.DB.prepare(
+        'INSERT INTO photos (record_id, r2_key, filename) VALUES (?, ?, ?)'
+      );
+      for (const photo of photoKeys) {
+        await insertPhoto.bind(id, photo.key, photo.filename || null).run();
+      }
+    }
 
     const updated = await c.env.DB.prepare(
       `SELECT r.*, u.nickname as creator_nickname
