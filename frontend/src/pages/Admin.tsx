@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi, permissionsApi, recordsApi } from '../api/client';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const visibilityLabels: Record<string, { label: string; emoji: string; color: string }> = {
   public: { label: '公开', emoji: '🌍', color: 'bg-green-100 text-green-700 border-green-200' },
@@ -31,6 +32,11 @@ export default function Admin() {
   const [recordsTotal, setRecordsTotal] = useState(0);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [changingVis, setChangingVis] = useState<number | null>(null);
+
+  // 确认删除弹窗
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; recordId: number; recordTitle: string }>({
+    open: false, recordId: 0, recordTitle: '',
+  });
 
   useEffect(() => {
     if (!isAdmin) {
@@ -85,7 +91,6 @@ export default function Admin() {
   };
 
   const handleDeleteRecord = async (id: number) => {
-    if (!confirm(`确定要删除记录 #${id} 吗？`)) return;
     try {
       await recordsApi.delete(id);
       setMessage(`记录已删除 ✅`);
@@ -94,6 +99,15 @@ export default function Admin() {
     } catch (err) {
       console.error('删除失败:', err);
     }
+  };
+
+  const openDeleteConfirm = (record: any) => {
+    setDeleteConfirm({ open: true, recordId: record.id, recordTitle: record.title });
+  };
+
+  const confirmDelete = () => {
+    handleDeleteRecord(deleteConfirm.recordId);
+    setDeleteConfirm({ open: false, recordId: 0, recordTitle: '' });
   };
 
   // 更新权限
@@ -251,7 +265,7 @@ export default function Admin() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
-                          onClick={() => handleDeleteRecord(record.id)}
+                          onClick={() => openDeleteConfirm(record)}
                           className="px-3 py-1 text-xs rounded-xl border border-red-200 text-red-400 hover:bg-red-50 hover:text-red-600 transition-all"
                         >
                           🗑️ 删除
@@ -407,6 +421,18 @@ export default function Admin() {
           </div>
         </div>
       )}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="删除记录"
+        message={`确定要删除「${deleteConfirm.recordTitle}」吗？\n此操作无法撤销，相关照片也会被一并删除。`}
+        confirmText="🗑️ 确认删除"
+        cancelText="取消"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ open: false, recordId: 0, recordTitle: '' })}
+      />
     </div>
   );
 }

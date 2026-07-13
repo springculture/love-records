@@ -7,6 +7,7 @@ import { recordsApi, uploadApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import RecordCard from '../components/RecordCard';
 import { createThumbnail, getThumbKey } from '../utils/image';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Records() {
   const { user, isAuthenticated, isAdmin } = useAuth();
@@ -31,6 +32,11 @@ export default function Records() {
   const [uploading, setUploading] = useState(false);
   const [formVisibility, setFormVisibility] = useState<'public' | 'users' | 'private'>('public');
   const [error, setError] = useState('');
+
+  // 确认删除弹窗
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; recordId: number }>({
+    open: false, recordId: 0,
+  });
 
   const fetchRecords = useCallback(async (page = 1) => {
     setLoading(true);
@@ -187,13 +193,21 @@ export default function Records() {
 
   // 删除记录
   const handleDelete = async (id: number) => {
-    if (!confirm('确定要删除这条记录吗？')) return;
     try {
       await recordsApi.delete(id);
       fetchRecords(pagination.page);
     } catch (err) {
       console.error('删除失败:', err);
     }
+  };
+
+  const openDeleteConfirm = (id: number) => {
+    setDeleteConfirm({ open: true, recordId: id });
+  };
+
+  const confirmDelete = () => {
+    handleDelete(deleteConfirm.recordId);
+    setDeleteConfirm({ open: false, recordId: 0 });
   };
 
   const tabs = [
@@ -250,7 +264,7 @@ export default function Records() {
               <RecordCard
                 key={record.id}
                 record={record}
-                onDelete={handleDelete}
+                onDelete={openDeleteConfirm}
                 onEdit={openEditForm}
                 isOwner={user?.id === record.created_by}
                 isAdmin={isAdmin}
@@ -292,6 +306,18 @@ export default function Records() {
           )}
         </div>
       )}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        title="删除记录"
+        message="确定要删除这条记录吗？\n此操作无法撤销。"
+        confirmText="🗑️ 确认删除"
+        cancelText="取消"
+        type="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirm({ open: false, recordId: 0 })}
+      />
 
       {/* 创建/编辑弹窗 */}
       {showCreate && (
