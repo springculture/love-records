@@ -22,6 +22,7 @@ interface RecordItem {
   created_by: number;
   creator_nickname?: string;
   photos: Photo[];
+  visibility?: 'public' | 'users' | 'private';
   created_at: string;
 }
 
