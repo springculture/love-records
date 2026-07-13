@@ -8,7 +8,7 @@ import type { Env, Record, RecordWithPhotos, Photo } from '../types';
 const records = new Hono<{ Bindings: Env }>();
 
 /**
- * GET /api/records - 获取记录列表（支持分页和筛选）
+ * GET /api/records - 获取记录列表（支持分页和筛选 + 可见性控制）
  */
 records.get('/', optionalAuth, async (c) => {
   try {
@@ -16,6 +16,7 @@ records.get('/', optionalAuth, async (c) => {
     const page = parseInt(c.req.query('page') || '1');
     const limit = parseInt(c.req.query('limit') || '20');
     const type = c.req.query('type'); // 'eat' | 'play' | undefined
+    const adminAll = c.req.query('admin_all'); // 管理员查看全部
     const offset = (page - 1) * limit;
 
     let sql = `
@@ -26,12 +27,27 @@ records.get('/', optionalAuth, async (c) => {
     `;
     const params: any[] = [];
 
+    // 可见性过滤
+    if (user?.role === 'admin' && adminAll === 'true') {
+      // 管理员查看全部（admin_all 参数）
+    } else if (user?.role === 'admin') {
+      // 普通列表，管理员看到所有公开 + 登录用户可见的记录
+      sql += ' AND (r.visibility IN (\'public\', \'users\') OR r.created_by = ?)';
+      params.push(user.userId);
+    } else if (user) {
+      // 登录用户：公开 + 仅用户 + 自己的私密
+      sql += ' AND (r.visibility IN (\'public\', \'users\') OR (r.visibility = \'private\' AND r.created_by = ?))';
+      params.push(user.userId);
+    } else {
+      // 游客：仅公开
+      sql += " AND r.visibility = 'public'";
+    }
+
     if (type && (type === 'eat' || type === 'play')) {
       sql += ' AND r.type = ?';
       params.push(type);
     }
 
-    // 游客只能查看，不能看到未公开的？这里简化处理，所有记录都可见
     sql += ' ORDER BY r.date DESC, r.created_at DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
@@ -50,6 +66,17 @@ records.get('/', optionalAuth, async (c) => {
     // 获取总数
     let countSql = 'SELECT COUNT(*) as total FROM records WHERE 1=1';
     const countParams: any[] = [];
+    if (user?.role === 'admin' && adminAll === 'true') {
+      // 管理员全部
+    } else if (user?.role === 'admin') {
+      countSql += ' AND (visibility IN (\'public\', \'users\') OR created_by = ?)';
+      countParams.push(user.userId);
+    } else if (user) {
+      countSql += ' AND (visibility IN (\'public\', \'users\') OR (visibility = \'private\' AND created_by = ?))';
+      countParams.push(user.userId);
+    } else {
+      countSql += " AND visibility = 'public'";
+    }
     if (type && (type === 'eat' || type === 'play')) {
       countSql += ' AND type = ?';
       countParams.push(type);
@@ -77,6 +104,7 @@ records.get('/', optionalAuth, async (c) => {
 records.get('/:id', optionalAuth, async (c) => {
   try {
     const id = parseInt(c.req.param('id'));
+    const user = c.get('user');
     if (isNaN(id)) {
       return c.json({ error: '无效的记录ID' }, 400);
     }
@@ -90,6 +118,17 @@ records.get('/:id', optionalAuth, async (c) => {
 
     if (!record) {
       return c.json({ error: '记录不存在' }, 404);
+    }
+
+    // 可见性检查
+    const canView =
+      user?.role === 'admin' ||
+      record.visibility === 'public' ||
+      (record.visibility === 'users' && user) ||
+      (record.visibility === 'private' && (record.created_by === user?.userId));
+
+    if (!canView) {
+      return c.json({ error: '无权查看此记录' }, 403);
     }
 
     const photos = await c.env.DB.prepare(
@@ -111,7 +150,7 @@ records.get('/:id', optionalAuth, async (c) => {
 records.post('/', authenticate, requirePermission('records', 'can_create'), async (c) => {
   try {
     const user = c.get('user');
-    const { type, date, title, location, description, photoKeys } = await c.req.json();
+    const { type, date, title, location, description, photoKeys, visibility } = await c.req.json();
 
     if (!type || !date || !title) {
       return c.json({ error: '类型、日期和主题不能为空' }, 400);
@@ -121,9 +160,13 @@ records.post('/', authenticate, requirePermission('records', 'can_create'), asyn
       return c.json({ error: '类型必须是 eat 或 play' }, 400);
     }
 
+    // 可见性默认为 'public'
+    const vis = visibility && ['public', 'users', 'private'].includes(visibility)
+      ? visibility : 'public';
+
     const result = await c.env.DB.prepare(
-      'INSERT INTO records (type, date, title, location, description, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).bind(type, date, title, location || null, description || null, user.userId).run();
+      'INSERT INTO records (type, date, title, location, description, created_by, visibility) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).bind(type, date, title, location || null, description || null, user.userId, vis).run();
 
     const recordId = result.meta.last_row_id;
 
@@ -167,7 +210,7 @@ records.put('/:id', authenticate, requirePermission('records', 'can_update'), as
   try {
     const id = parseInt(c.req.param('id'));
     const user = c.get('user');
-    const { type, date, title, location, description } = await c.req.json();
+    const { type, date, title, location, description, visibility } = await c.req.json();
 
     if (isNaN(id)) {
       return c.json({ error: '无效的记录ID' }, 400);
@@ -187,10 +230,13 @@ records.put('/:id', authenticate, requirePermission('records', 'can_update'), as
       return c.json({ error: '只能编辑自己的记录' }, 403);
     }
 
+    const vis = visibility && ['public', 'users', 'private'].includes(visibility)
+      ? visibility : existing.visibility;
+
     await c.env.DB.prepare(
       `UPDATE records
        SET type = ?, date = ?, title = ?, location = ?, description = ?,
-           updated_at = datetime('now')
+           visibility = ?, updated_at = datetime('now')
        WHERE id = ?`
     ).bind(
       type || existing.type,
@@ -198,6 +244,7 @@ records.put('/:id', authenticate, requirePermission('records', 'can_update'), as
       title || existing.title,
       location !== undefined ? location : existing.location,
       description !== undefined ? description : existing.description,
+      vis,
       id
     ).run();
 
@@ -267,6 +314,42 @@ records.delete('/:id', authenticate, requirePermission('records', 'can_delete'),
   } catch (error) {
     console.error('删除记录失败:', error);
     return c.json({ error: '删除记录失败' }, 500);
+  }
+});
+
+/**
+ * PATCH /api/records/:id/visibility - 管理员修改记录可见性
+ */
+records.patch('/:id/visibility', authenticate, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.role !== 'admin') {
+      return c.json({ error: '仅管理员可修改可见性' }, 403);
+    }
+
+    const id = parseInt(c.req.param('id'));
+    const { visibility } = await c.req.json();
+
+    if (!visibility || !['public', 'users', 'private'].includes(visibility)) {
+      return c.json({ error: '可见性值无效，可选: public, users, private' }, 400);
+    }
+
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM records WHERE id = ?'
+    ).bind(id).first();
+
+    if (!existing) {
+      return c.json({ error: '记录不存在' }, 404);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE records SET visibility = ?, updated_at = datetime('now') WHERE id = ?`
+    ).bind(visibility, id).run();
+
+    return c.json({ message: '可见性已更新 ✅', visibility });
+  } catch (error) {
+    console.error('更新可见性失败:', error);
+    return c.json({ error: '更新可见性失败' }, 500);
   }
 });
 

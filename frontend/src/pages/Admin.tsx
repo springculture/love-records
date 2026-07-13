@@ -1,15 +1,21 @@
 /**
- * 管理页面 - 用户管理 & 权限配置（仅管理员）
+ * 管理页面 - 用户管理 & 权限配置 & 记录管理（仅管理员）
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { authApi, permissionsApi } from '../api/client';
+import { authApi, permissionsApi, recordsApi } from '../api/client';
+
+const visibilityLabels: Record<string, { label: string; emoji: string; color: string }> = {
+  public: { label: '公开', emoji: '🌍', color: 'bg-green-100 text-green-700 border-green-200' },
+  users: { label: '登录用户', emoji: '👥', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  private: { label: '私密', emoji: '🔒', color: 'bg-pink-100 text-pink-700 border-pink-200' },
+};
 
 export default function Admin() {
   const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'users' | 'permissions'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'permissions' | 'records'>('users');
 
   // 用户列表
   const [users, setUsers] = useState<any[]>([]);
@@ -19,6 +25,13 @@ export default function Admin() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
+  // 记录管理
+  const [allRecords, setAllRecords] = useState<any[]>([]);
+  const [recordsPage, setRecordsPage] = useState(1);
+  const [recordsTotal, setRecordsTotal] = useState(0);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [changingVis, setChangingVis] = useState<number | null>(null);
+
   useEffect(() => {
     if (!isAdmin) {
       navigate('/');
@@ -26,6 +39,10 @@ export default function Admin() {
     }
     fetchData();
   }, [isAdmin]);
+
+  useEffect(() => {
+    if (activeTab === 'records') fetchAllRecords();
+  }, [activeTab, recordsPage]);
 
   const fetchData = async () => {
     try {
@@ -37,6 +54,45 @@ export default function Admin() {
       setPermissions(permsRes.data.permissions);
     } catch (err) {
       console.error('获取数据失败:', err);
+    }
+  };
+
+  const fetchAllRecords = async () => {
+    setRecordsLoading(true);
+    try {
+      const res = await recordsApi.listAll({ page: recordsPage, limit: 20 });
+      setAllRecords(res.data.records);
+      setRecordsTotal(res.data.pagination.total);
+    } catch (err) {
+      console.error('获取记录失败:', err);
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+
+  const handleVisibilityChange = async (recordId: number, visibility: string) => {
+    setChangingVis(recordId);
+    try {
+      await recordsApi.updateVisibility(recordId, visibility);
+      setMessage(`可见性已更新 ✅ (ID: ${recordId})`);
+      fetchAllRecords();
+      setTimeout(() => setMessage(''), 2500);
+    } catch (err) {
+      console.error('更新可见性失败:', err);
+    } finally {
+      setChangingVis(null);
+    }
+  };
+
+  const handleDeleteRecord = async (id: number) => {
+    if (!confirm(`确定要删除记录 #${id} 吗？`)) return;
+    try {
+      await recordsApi.delete(id);
+      setMessage(`记录已删除 ✅`);
+      fetchAllRecords();
+      setTimeout(() => setMessage(''), 2500);
+    } catch (err) {
+      console.error('删除失败:', err);
     }
   };
 
@@ -73,8 +129,9 @@ export default function Admin() {
   if (!isAdmin) return null;
 
   const tabs = [
-    { key: 'users', label: '👥 用户管理', emoji: '👥' },
-    { key: 'permissions', label: '🔐 权限配置', emoji: '🔐' },
+    { key: 'records', label: '📝 记录管理' },
+    { key: 'users', label: '👥 用户管理' },
+    { key: 'permissions', label: '🔐 权限配置' },
   ];
 
   const actionLabels: Record<string, string> = {
@@ -101,7 +158,7 @@ export default function Admin() {
       {/* 页面标题 */}
       <div className="mb-8">
         <h1 className="text-3xl font-cute text-gray-700">⚙️ 管理后台</h1>
-        <p className="text-sm text-gray-400 mt-1">管理用户和权限配置</p>
+        <p className="text-sm text-gray-400 mt-1">管理用户、记录和权限配置</p>
         {message && (
           <div className="mt-3 p-3 rounded-2xl bg-green-50 text-green-600 text-sm inline-block">
             {message}
@@ -110,11 +167,11 @@ export default function Admin() {
       </div>
 
       {/* Tab 切换 */}
-      <div className="flex gap-2 mb-8">
+      <div className="flex gap-2 mb-8 flex-wrap">
         {tabs.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key as 'users' | 'permissions')}
+            onClick={() => setActiveTab(tab.key as any)}
             className={`px-5 py-2.5 rounded-2xl text-sm font-medium transition-all ${
               activeTab === tab.key
                 ? 'bg-gradient-to-r from-macaron-pink-200 to-macaron-blue-200 text-gray-700 shadow-sm'
@@ -126,7 +183,109 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* 用户管理 */}
+      {/* ========== 记录管理 ========== */}
+      {activeTab === 'records' && (
+        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-cute overflow-hidden">
+          <div className="p-6 border-b border-macaron-pink-100 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-gray-700">📝 记录管理</h2>
+              <p className="text-sm text-gray-400">共 {recordsTotal} 条记录 — 可修改每条记录的可见范围</p>
+            </div>
+          </div>
+
+          {recordsLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin text-3xl">💕</div>
+              <p className="text-gray-400 mt-2">加载中...</p>
+            </div>
+          ) : allRecords.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">暂无记录</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-macaron-pink-50/50">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">ID</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">类型</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">主题</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">日期</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">创建者</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">可见范围</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allRecords.map((record: any) => (
+                    <tr key={record.id} className="border-t border-macaron-pink-50 hover:bg-macaron-pink-50/30 transition-colors">
+                      <td className="px-4 py-3 text-sm text-gray-500">#{record.id}</td>
+                      <td className="px-4 py-3 text-sm">
+                        {record.type === 'eat' ? '🍽️ 吃' : '🎮 玩'}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-700 max-w-[200px] truncate">
+                        {record.title}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{record.date}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {record.creator_nickname || `#${record.created_by}`}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center gap-1">
+                          {['public', 'users', 'private'].map((v) => {
+                            const vl = visibilityLabels[v];
+                            return (
+                              <button
+                                key={v}
+                                onClick={() => handleVisibilityChange(record.id, v)}
+                                disabled={changingVis === record.id}
+                                className={`px-2 py-1 text-xs rounded-xl border transition-all ${
+                                  record.visibility === v
+                                    ? `${vl.color} font-bold shadow-sm`
+                                    : 'border-gray-200 text-gray-400 hover:border-gray-300'
+                                }`}
+                              >
+                                {vl.emoji} {vl.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleDeleteRecord(record.id)}
+                          className="px-3 py-1 text-xs rounded-xl border border-red-200 text-red-400 hover:bg-red-50 hover:text-red-600 transition-all"
+                        >
+                          🗑️ 删除
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* 分页 */}
+              {Math.ceil(recordsTotal / 20) > 1 && (
+                <div className="flex justify-center gap-2 p-4 border-t border-macaron-pink-100">
+                  {Array.from({ length: Math.ceil(recordsTotal / 20) }, (_, i) => i + 1).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setRecordsPage(p)}
+                      className={`w-8 h-8 rounded-xl text-xs font-medium transition-all ${
+                        recordsPage === p
+                          ? 'bg-macaron-pink-400 text-white'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========== 用户管理 ========== */}
       {activeTab === 'users' && (
         <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-cute overflow-hidden">
           <div className="p-6 border-b border-macaron-pink-100">
@@ -170,7 +329,7 @@ export default function Admin() {
         </div>
       )}
 
-      {/* 权限配置 */}
+      {/* ========== 权限配置 ========== */}
       {activeTab === 'permissions' && (
         <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-cute p-6">
           <h2 className="text-lg font-bold text-gray-700 mb-1">🔐 权限配置</h2>

@@ -29,6 +29,7 @@ export interface Record {
   location: string | null;
   description: string | null;
   created_by: number;
+  visibility: 'public' | 'users' | 'private';
   created_at: string;
   updated_at: string;
 }

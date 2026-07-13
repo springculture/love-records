@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import { recordsApi, uploadApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import RecordCard from '../components/RecordCard';
+import { createThumbnail, getThumbKey } from '../utils/image';
 
 export default function Records() {
   const { user, isAuthenticated, isAdmin } = useAuth();
@@ -28,6 +29,7 @@ export default function Records() {
   const [formPhotos, setFormPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [formVisibility, setFormVisibility] = useState<'public' | 'users' | 'private'>('public');
   const [error, setError] = useState('');
 
   const fetchRecords = useCallback(async (page = 1) => {
@@ -67,6 +69,7 @@ export default function Records() {
     setFormTitle('');
     setFormLocation('');
     setFormDescription('');
+    setFormVisibility('public');
     setFormPhotos([]);
     setPhotoPreviews([]);
     setError('');
@@ -82,6 +85,7 @@ export default function Records() {
     setFormTitle(record.title);
     setFormLocation(record.location || '');
     setFormDescription(record.description || '');
+    setFormVisibility(record.visibility || 'public');
     setFormPhotos([]);
     setPhotoPreviews([]);
     setError('');
@@ -96,8 +100,10 @@ export default function Records() {
     files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = (ev) => {
-        if (ev.target?.result) {
-          setPhotoPreviews((prev) => [...prev, ev.target.result as string]);
+        const target = ev.target;
+        const result = target?.result;
+        if (typeof result === 'string') {
+          setPhotoPreviews((prev) => [...prev, result]);
         }
       };
       reader.readAsDataURL(file);
@@ -116,16 +122,42 @@ export default function Records() {
     setUploading(true);
 
     try {
-      // 先上传照片
+      // 先上传照片（原图 + 缩略图）
       const photoKeys: { key: string; filename: string }[] = [];
       if (formPhotos.length > 0) {
-        for (const file of formPhotos) {
+        for (let i = 0; i < formPhotos.length; i++) {
+          const file = formPhotos[i];
+          setError(`正在处理照片 ${i + 1}/${formPhotos.length}...`);
+
+          // 上传原图
           const uploadRes = await uploadApi.uploadFile(file);
+          const fullKey = uploadRes.data.photo.key;
+
+          // 缩略图 key：在文件名前加 -thumb
+          const dotIndex = fullKey.lastIndexOf('.');
+          const thumbKey = dotIndex === -1
+            ? `${fullKey}-thumb`
+            : `${fullKey.slice(0, dotIndex)}-thumb${fullKey.slice(dotIndex)}`;
+
+          // 生成并上传缩略图
+          try {
+            const thumbBlob = await createThumbnail(file, 300);
+            const thumbFile = new File(
+              [thumbBlob],
+              `thumb-${file.name}`,
+              { type: 'image/webp' }
+            );
+            await uploadApi.uploadThumbnail(thumbFile, thumbKey);
+          } catch (thumbErr) {
+            console.warn('缩略图生成失败，仅使用原图:', thumbErr);
+          }
+
           photoKeys.push({
-            key: uploadRes.data.photo.key,
-            filename: uploadRes.data.photo.filename,
+            key: fullKey,
+            filename: file.name,
           });
         }
+        setError('');
       }
 
       const recordData = {
@@ -134,6 +166,7 @@ export default function Records() {
         title: formTitle,
         location: formLocation || undefined,
         description: formDescription || undefined,
+        visibility: formVisibility,
         photoKeys: photoKeys.length > 0 ? photoKeys : undefined,
       };
 
@@ -298,6 +331,32 @@ export default function Records() {
                       }`}
                     >
                       {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 可见性选择 */}
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-2">可见范围</label>
+                <div className="flex gap-3">
+                  {[
+                    { value: 'public', label: '🌍 公开', desc: '所有人可见', color: 'border-green-300 bg-green-50' },
+                    { value: 'users', label: '👥 登录用户', desc: '仅登录用户可见', color: 'border-macaron-blue-300 bg-macaron-blue-50' },
+                    { value: 'private', label: '🔒 私密', desc: '仅你和管理员', color: 'border-macaron-pink-300 bg-macaron-pink-50' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setFormVisibility(option.value as 'public' | 'users' | 'private')}
+                      className={`flex-1 px-3 py-2.5 rounded-2xl text-sm font-medium transition-all border-2 ${
+                        formVisibility === option.value
+                          ? option.color + ' shadow-sm'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      <div>{option.label}</div>
+                      <div className="text-xs font-normal mt-0.5 opacity-70">{option.desc}</div>
                     </button>
                   ))}
                 </div>

@@ -5,10 +5,12 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoginModal from './LoginModal';
+import ProfileEditModal from './ProfileEditModal';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, isAdmin, logout } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const location = useLocation();
 
@@ -54,7 +56,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {isAuthenticated && user ? (
                 <div className="flex items-center gap-3">
                   <span className="hidden sm:inline text-sm text-gray-600">
-                    <span className="font-medium text-macaron-pink-600">{user.nickname}</span>
+                    <span className="font-medium text-macaron-pink-600 cursor-pointer hover:underline" onClick={() => setShowProfileEdit(true)}>
+                      {user.nickname} ✏️
+                    </span>
                     <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-macaron-blue-100 text-macaron-blue-700">
                       {user.role === 'admin' ? '管理员' : user.role === 'user' ? '用户' : '游客'}
                     </span>
@@ -132,6 +136,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* 登录/注册弹窗 */}
       <LoginModal open={showLogin} onClose={() => setShowLogin(false)} />
+
+      {/* 个人资料编辑弹窗 */}
+      <ProfileEditModal open={showProfileEdit} onClose={() => setShowProfileEdit(false)} />
     </div>
   );
 }

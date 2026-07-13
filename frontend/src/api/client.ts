@@ -3,8 +3,11 @@
  */
 import axios from 'axios';
 
+// API 地址：Pages Function 会代理 /api/* 到 Worker
+const API_BASE_URL = '/api';
+
 const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -74,6 +77,10 @@ export const authApi = {
 
   getUsers: () =>
     apiClient.get<{ users: any[] }>('/auth/users'),
+
+  /** 修改昵称 */
+  updateProfile: (params: { nickname: string }) =>
+    apiClient.put<{ message: string; user: any }>('/auth/profile', params),
 };
 
 // ====== 记录相关 API ======
@@ -112,6 +119,14 @@ export const recordsApi = {
 
   delete: (id: number) =>
     apiClient.delete<{ message: string }>(`/records/${id}`),
+
+  /** 管理员修改可见性 */
+  updateVisibility: (id: number, visibility: string) =>
+    apiClient.patch<{ message: string; visibility: string }>(`/records/${id}/visibility`, { visibility }),
+
+  /** 管理员获取全部记录 */
+  listAll: (params?: { page?: number; limit?: number }) =>
+    apiClient.get<RecordResponse>('/records', { params: { ...params, admin_all: 'true' } }),
 };
 
 // ====== 上传相关 API ======
@@ -120,6 +135,16 @@ export const uploadApi = {
   uploadFile: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
+    return apiClient.post<{ message: string; photo: any }>('/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  /** 上传缩略图到指定 key（在原图 key 基础上加 -thumb） */
+  uploadThumbnail: (file: File, targetKey: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('target_key', targetKey);
     return apiClient.post<{ message: string; photo: any }>('/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });

@@ -125,6 +125,41 @@ auth.get('/me', authenticate, async (c) => {
 });
 
 /**
+ * PUT /api/auth/profile - 修改个人信息（昵称）
+ */
+auth.put('/profile', authenticate, async (c) => {
+  try {
+    const user = c.get('user');
+    const { nickname } = await c.req.json();
+
+    if (!nickname || nickname.trim().length === 0) {
+      return c.json({ error: '昵称不能为空' }, 400);
+    }
+
+    if (nickname.trim().length > 20) {
+      return c.json({ error: '昵称不能超过20个字符' }, 400);
+    }
+
+    await c.env.DB.prepare(
+      "UPDATE users SET nickname = ?, updated_at = datetime('now') WHERE id = ?"
+    ).bind(nickname.trim(), user.userId).run();
+
+    return c.json({
+      message: '昵称修改成功 💕',
+      user: {
+        id: user.userId,
+        username: user.username,
+        role: user.role,
+        nickname: nickname.trim(),
+      },
+    });
+  } catch (error) {
+    console.error('修改昵称失败:', error);
+    return c.json({ error: '修改昵称失败，请稍后重试' }, 500);
+  }
+});
+
+/**
  * GET /api/auth/users - 获取用户列表（管理员）
  */
 auth.get('/users', authenticate, async (c) => {

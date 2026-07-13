@@ -33,10 +33,17 @@ upload.post('/', authenticate, requirePermission('photos', 'can_create'), async 
     }
 
     // 生成唯一的文件路径：user_id/timestamp-random.extension
-    const ext = file.name.split('.').pop() || 'jpg';
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8);
-    const r2Key = `photos/${user.userId}/${timestamp}-${random}.${ext}`;
+    // 如果提供了 target_key，则使用自定义 key（用于缩略图等）
+    const customKey = formData.get('target_key');
+    let r2Key: string;
+    if (customKey && typeof customKey === 'string') {
+      r2Key = customKey;
+    } else {
+      const ext = file.name.split('.').pop() || 'jpg';
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(2, 8);
+      r2Key = `photos/${user.userId}/${timestamp}-${random}.${ext}`;
+    }
 
     // 上传到 R2
     const arrayBuffer = await file.arrayBuffer();

@@ -15,7 +15,16 @@ const app = new Hono<{ Bindings: Env }>();
 // 全局中间件
 app.use('*', logger());
 app.use('*', cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'https://love-records.pages.dev'],
+  origin: (origin) => {
+    if (!origin) return '*';
+    // 允许本地开发和所有 pages.dev 预览域名
+    if (origin.includes('localhost') ||
+        origin.endsWith('.pages.dev') ||
+        origin.endsWith('.workers.dev')) {
+      return origin;
+    }
+    return origin;
+  },
   credentials: true,
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],

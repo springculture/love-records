@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await authApi.login({ username, password });
     const { token: newToken, user: userData } = response.data;
     setToken(newToken);
-    setUser(userData);
+    setUser(userData as User);
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(userData));
   };
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await authApi.register({ username, password, nickname });
     const { token: newToken, user: userData } = response.data;
     setToken(newToken);
-    setUser(userData);
+    setUser(userData as User);
     localStorage.setItem('token', newToken);
     localStorage.setItem('user', JSON.stringify(userData));
   };

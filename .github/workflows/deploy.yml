@@ -60,8 +60,7 @@ jobs:
           VITE_API_BASE_URL: /api
 
       - name: 部署到 Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CF_API_TOKEN }}
-          workingDirectory: ./frontend
-          command: pages deploy dist --project-name=love-records
+        run: npx wrangler pages deploy dist --project-name=love-records --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
