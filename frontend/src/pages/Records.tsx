@@ -464,7 +464,7 @@ export default function Records() {
                     />
                   </label>
                 </div>
-                <p className="text-xs text-gray-400">支持 JPG、PNG、GIF、WebP，每张不超过 10MB</p>
+                <p className="text-xs text-gray-400">支持 JPG、PNG、GIF、WebP，每张不超过 50MB</p>
               </div>
 
               {/* 错误信息 */}

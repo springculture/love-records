@@ -26,10 +26,10 @@ upload.post('/', authenticate, requirePermission('photos', 'can_create'), async 
       return c.json({ error: '仅支持 JPG、PNG、GIF、WebP、HEIC 格式的图片' }, 400);
     }
 
-    // 验证文件大小（最大 10MB）
-    const maxSize = 10 * 1024 * 1024;
+    // 验证文件大小（最大 50MB）
+    const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
-      return c.json({ error: '图片大小不能超过 10MB' }, 400);
+      return c.json({ error: '图片大小不能超过 50MB' }, 400);
     }
 
     // 生成唯一的文件路径：user_id/timestamp-random.extension
@@ -95,12 +95,18 @@ upload.post('/batch', authenticate, requirePermission('photos', 'can_create'), a
     }
 
     const uploadedPhotos = [];
+    const maxSize = 50 * 1024 * 1024;
 
     for (const file of files) {
       if (!(file instanceof File)) continue;
 
       const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
       if (!allowedTypes.includes(file.type)) continue;
+
+      // 每张图片不能超过 50MB
+      if (file.size > maxSize) {
+        return c.json({ error: `"${file.name}" 大小不能超过 50MB` }, 400);
+      }
 
       const ext = file.name.split('.').pop() || 'jpg';
       const timestamp = Date.now();
