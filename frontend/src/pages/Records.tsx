@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import { recordsApi, uploadApi } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import RecordCard from '../components/RecordCard';
-import { createThumbnail, getThumbKey } from '../utils/image';
+import { createThumbnail, getFullUrl } from '../utils/image';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Records() {
@@ -29,6 +29,7 @@ export default function Records() {
   const [formDescription, setFormDescription] = useState('');
   const [formPhotos, setFormPhotos] = useState<File[]>([]);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([]);
+  const [existingPhotos, setExistingPhotos] = useState<any[]>([]); // 编辑时已有的照片
   const [uploading, setUploading] = useState(false);
   const [formVisibility, setFormVisibility] = useState<'public' | 'users' | 'private'>('public');
   const [error, setError] = useState('');
@@ -78,6 +79,7 @@ export default function Records() {
     setFormVisibility('public');
     setFormPhotos([]);
     setPhotoPreviews([]);
+    setExistingPhotos([]);
     setError('');
     setShowCreate(true);
   };
@@ -94,6 +96,7 @@ export default function Records() {
     setFormVisibility(record.visibility || 'public');
     setFormPhotos([]);
     setPhotoPreviews([]);
+    setExistingPhotos(record.photos || []);
     setError('');
     setShowCreate(true);
   };
@@ -439,10 +442,26 @@ export default function Records() {
 
               {/* 照片上传 */}
               <div>
-                <label className="block text-sm font-medium text-gray-600 mb-2">照片</label>
+                <label className="block text-sm font-medium text-gray-600 mb-2">
+                  照片 {existingPhotos.length > 0 && `（已有 ${existingPhotos.length} 张）`}
+                </label>
                 <div className="flex flex-wrap gap-3 mb-3">
+                  {/* 编辑时：展示已有的照片 */}
+                  {existingPhotos.map((photo, i) => (
+                    <div key={`exist-${photo.id || i}`} className="relative w-24 h-24 rounded-2xl overflow-hidden group">
+                      <img
+                        src={getFullUrl(photo.r2_key)}
+                        alt={photo.filename || '已有照片'}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all flex items-center justify-center">
+                        <span className="text-white/0 group-hover:text-white/70 text-xs drop-shadow-lg transition-all">已有</span>
+                      </div>
+                    </div>
+                  ))}
+                  {/* 新增照片预览 */}
                   {photoPreviews.map((preview, i) => (
-                    <div key={i} className="relative w-24 h-24 rounded-2xl overflow-hidden">
+                    <div key={`new-${i}`} className="relative w-24 h-24 rounded-2xl overflow-hidden">
                       <img src={preview} alt="" className="w-full h-full object-cover" />
                       <button
                         type="button"
@@ -451,6 +470,9 @@ export default function Records() {
                       >
                         ✕
                       </button>
+                      <span className="absolute bottom-1 left-1 text-[10px] bg-black/40 text-white px-1 rounded">
+                        新增
+                      </span>
                     </div>
                   ))}
                   <label className="w-24 h-24 rounded-2xl border-2 border-dashed border-macaron-pink-300 flex items-center justify-center cursor-pointer hover:bg-macaron-pink-50 transition-all">
